@@ -17,7 +17,7 @@ For our topic today lets focus on ***L-IPAMD***, a.k.a Local IP Address Manager 
     **Note**: For more information about how many network interfaces and private IP addresses are supported for each network interface, please refer to documentation [here](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/using-eni.html#AvailableIpPerENI).
 
 - There are configuration variables that allow you to change the default behavior for when the plugin creates new network interfaces or attaches additional secondary private IPv4 addresses and they are namely *WARM_ENI_TARGET*, *WARM_IP_TARGET* and *MINIMUM_IP_TARGET*.
-- The number of IPs to keep around in the warm pool controlled by these variables.
+- The number of IPs maintained in the warm pool are controlled by these variables.
 
 #### **WARM_ENI_TARGET:** 
 -  This variable dictates how many ENIs the L-IPAMD should keep available in its warm pool, so that the pods when scheduled on that node can immediately get an IP assigned to it.
@@ -41,13 +41,13 @@ For our topic today lets focus on ***L-IPAMD***, a.k.a Local IP Address Manager 
 - Now, if you provision '5' pods on the above discussed node, the L-IPAMD tries to assign one more IPv4 address to the ENI to satisfy the WARM_IP_TARGET of '1'.
 - The MINIMUM_IP_TARGET comes into picture only during the initial stages of a node when it comes up for the first time. Once the MINIMUM_IP_TARGET number of pods are provisioned, L-IPAMD only tries to satisfy WARM_IP_TARGET condition. 
 
-### Best practices to follow when setting these environment variables for efficient usage of IP addresses in your Subnet:
+### Best practices to follow when setting these configuration variables for efficient usage of IP addresses in your Subnet:
 
 - When setting **WARM_ENI_TARGET**, be aware of the worker node instance type, its Maximum network interfaces and Private IPv4 addresses per interface. 
 
     **Example:** Setting WARM_ENI_TARGET=3 for m5.xlarge node implies that we are requesting L-IPAMD to assign 3 ENIs to the node at all times, thereby assigning 45 IPs (15 IPs per ENI). These 45 IPs are now blocked by this node and cannot be used for pods that are getting scheduled on other worker nodes. This can lead to quick exhaustion of IPs in the subnet.
 
-- However, if you do expect your application to scale out drastically, to accommodate for the newly scheduled pods quickly setting WARM_ENI_TARGET might be a suitable option.
+- However, if you do expect your application to scale out drastically, setting WARM_ENI_TARGET might be a suitable option to quickly accommodate the newly scheduled pods.
 
 - Whenever possible try to use **WARM_IP_TARGET**, so that only the required number of IPs are assigned to the network interface instead of blocking the ENIs' full IPs.
 
