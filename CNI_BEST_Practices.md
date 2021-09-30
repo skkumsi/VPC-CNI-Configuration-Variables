@@ -6,7 +6,7 @@ The Amazon VPC Container Network Interface (CNI) plugin for Kubernetes is deploy
 - **L-IPAMD**: Responsible for creating network interfaces and attaching the network interfaces to Amazon EC2 instances, assigning secondary IP addresses to network interfaces, and maintaining a warm pool of IP addresses. 
 - **CNI plugin:** – Responsible for wiring the host network (for example, configuring the network interfaces and virtual Ethernet pairs) and adding the correct network interface to the pod namespace.
 
-For our topic today lets focus on ***L-IPAMD***, a.k.a Local IP Address Manager Daemon.
+For our topic today lets focus on ***L-IPAMD***, a.k.a Local IP Address Manager Daemon and how it can be configured to efficiently allocate IPs to the nodes when required.
 
 ### **What exactly does L-IPAMD do?**
 - The CNI binary is invoked by the kubelet when a new pod gets scheduled or an existing pod is removed from the node.
@@ -16,7 +16,7 @@ For our topic today lets focus on ***L-IPAMD***, a.k.a Local IP Address Manager 
 
     **Note**: For more information about how many network interfaces and private IP addresses are supported for each network interface, please refer to documentation [here](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/using-eni.html#AvailableIpPerENI).
 
-- There are configuration variables that allow you to change the default behavior for when the plugin creates new network interfaces or attaches additional secondary private IPv4 addresses and they are namely ***WARM_ENI_TARGET***, ***WARM_IP_TARGET*** and ***MINIMUM_IP_TARGET***.
+- There are configuration variables that allow you to change the default behavior for when the plugin creates new network interfaces or attaches additional secondary private IPv4 addresses and they are namely ***WARM_ENI_TARGET***, ***WARM_IP_TARGET***, ***MINIMUM_IP_TARGET*** and the newly added ***WARM_PREFIX_TARGET*** which is required when using [VPC CNI prefix delegation](https://docs.aws.amazon.com/eks/latest/userguide/cni-increase-ip-addresses.html) feature.
 - The number of IPs maintained in the warm pool are controlled by these variables.
 
 #### **WARM_ENI_TARGET:** 
@@ -36,10 +36,18 @@ For our topic today lets focus on ***L-IPAMD***, a.k.a Local IP Address Manager 
 
 #### **MINIMUM_IP_TARGET:**
 - Setting this variable ensures that a minimum of defined number of IPs are assigned to the node when it comes up initially. This value also includes the *WARM_IP_TARGET* value if configured. It is generally used in conjunction with WARM_IP_TARGET.
-- For instance setting a MINIMUM_IP_TARGET=4 indicates that, when the node comes up for the first time it should have 4 IPs assigned to its ENI by default, even when there are no pods running on the node.
+- For instance, setting a MINIMUM_IP_TARGET=4 indicates that, when the node comes up for the first time it should have 4 IPs assigned to its ENI by default, even when there are no pods running on the node.
 - If a WARM_IP_TARGET=1 is set along with the MINIMUM_IP_TARGET=4, with no pods running on the node, still a warm pool of 4 IPs is maintained by L-IPAMD as MINIMUM_IP_TARGET also takes into account the value set by WARM_IP_TARGET. So at this point you have a total of '4' IPv4 addresses assigned to the ENI.
 - Now, if you provision '5' pods on the above discussed node, the L-IPAMD tries to assign one more IPv4 address to the ENI to satisfy the WARM_IP_TARGET of '1'.
 - The MINIMUM_IP_TARGET comes into picture only during the initial stages of a node when it comes up for the first time. Once the MINIMUM_IP_TARGET number of pods are provisioned, L-IPAMD only tries to satisfy WARM_IP_TARGET condition. 
+
+#### **WARM_PREFIX_TARGET** (available for CNI version 1.9.0+):
+- This variable is set when CNI Prefix Delegation feature is enabled for your cluster.
+- After enabling this feature, instead of assigning secondary IPv4 addresses to the ENI, a /28 prefix (16 continuous IP address block) is added to the ENI, thereby increasing the pod density on a given node.
+- Setting this variable ensures that you have a defined number of prefixes (/28 CIDR blocks) added to the instance's network interface at all times.
+- For instance, setting WARM_PREFIX_TARGET=1 indicates that by default there will be one prefix added to the network interface when there are no pods running. When you start provisioning the first few pods, a second prefix gets added to the network interface to satisfy the WARM_PREFIX_TARGET condition. 
+- For a t3.medium node with prefix delegation feature enabled, instead of adding 6 IPv4 addresses to a single ENI, '5' prefixes (# of IPv4s per ENI - 1) which is a total of 5 * 16 = 80 IPv4 addresses can be assigned, thereby increasing the pod density on the node.
+
 
 ### Best practices to follow when setting these configuration variables for efficient usage of IP addresses in your Subnet:
 
@@ -49,7 +57,9 @@ For our topic today lets focus on ***L-IPAMD***, a.k.a Local IP Address Manager 
 
 - However, if you do expect your application to scale out drastically, setting WARM_ENI_TARGET might be a suitable option to quickly accommodate the newly scheduled pods.
 
-- Whenever possible try to use WARM_IP_TARGET, so that only the required number of IPs are assigned to the network interface instead of blocking the ENIs' full IPs.
+- For clusters with low pod churn try to use WARM_IP_TARGET, so that only the required number of IPs are assigned to the network interface instead of blocking the ENIs' full IPs.
+
+- Also it is not advised to use WARM_IP_TARGET for large clusters as it will add a lot more EC2 calls eventually resulting is API throttling issues.
 
 - If you know the minimum number of pods that you are going to run per node, try to use MINIMUM_IP_TARGET, so that the required number of IPs are readily assigned and available on the node and can be given to the pod as soon as it gets scheduled without any delays. Set this variable along with the WARM_IP_TARGET, to make sure there are extra free IPs available on the node for future pods.
 
@@ -57,6 +67,8 @@ For our topic today lets focus on ***L-IPAMD***, a.k.a Local IP Address Manager 
 
     > **Error:**
     Setting WARM_PREFIX_TARGET = 0 is not supported while WARM_IP_TARGET/MINIMUM_IP_TARGET is not set. Please configure either one of the WARM_{PREFIX/IP}_TARGET or MINIMUM_IP_TARGET env variables
+
+- For smaller subnets, make use of WARM_IP_TARGET along with WARM_PREFIX_TARGET when using VPC Prefix delegation feature to avoid over allocating prefixes and thereby its IPs to the ENI. You could very quickly exhaust your free IPs when using this feature with small subnets.
 
 
 
