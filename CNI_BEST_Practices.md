@@ -10,8 +10,8 @@ For our topic today lets focus on ***L-IPAMD***, a.k.a Local IP Address Manager 
 
 ### **What exactly does L-IPAMD do?**
 - The CNI binary is invoked by the kubelet when a new pod gets scheduled or an existing pod is removed from the node.
-- The CNI binary then calls I-PAMD, asking for an IP for the new pod. If there are no available IPs in the cache, it will return an error.
-- I-PAMD keeps track of all ENIs and IPs attached to the instance.
+- The CNI binary then calls L-IPAMD, asking for an IP for the new pod. If there are no available IPs in the cache, it will return an error.
+- L-IPAMD keeps track of all ENIs and IPs attached to the instance.
 - When the number of pods running on the node exceeds the number of addresses that can be assigned to a single network interface, L-IPAMD starts allocating a new network interface, as long as the maximum number of network interfaces for the instance aren't already attached. 
 
     **Note**: For more information about how many network interfaces and private IP addresses are supported for each network interface, please refer to documentation [here](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/using-eni.html#AvailableIpPerENI).
@@ -37,8 +37,8 @@ For our topic today lets focus on ***L-IPAMD***, a.k.a Local IP Address Manager 
 #### **MINIMUM_IP_TARGET:**
 - Setting this variable ensures that a minimum of defined number of IPs are assigned to the node when it comes up initially. This value also includes the *WARM_IP_TARGET* value if configured. It is generally used in conjunction with WARM_IP_TARGET.
 - For instance setting a MINIMUM_IP_TARGET=4 indicates that, when the node comes up for the first time it should have 4 IPs assigned to its ENI by default, even when there are no pods running on the node.
-- If a WARM_IP_TARGET=1 is set along with the MINIMUM_IP_TARGET=4, with no pods running on the node, still a warm pool of 4 IPs is maintained by L-IPAMD as MINIMUM_IP_TARGET also takes into account the value set by WARM_IP_TARGET. So at this point you have a total of 5 IPv4 addresses assigned to the ENI.
-- Now, if you provision 5 pods on the above discussed node, the L-IPAMD tries to assign one more IPv4 address to the ENI to satisfy the WARM_IP_TARGET of '1'.
+- If a WARM_IP_TARGET=1 is set along with the MINIMUM_IP_TARGET=4, with no pods running on the node, still a warm pool of 4 IPs is maintained by L-IPAMD as MINIMUM_IP_TARGET also takes into account the value set by WARM_IP_TARGET. So at this point you have a total of '4' IPv4 addresses assigned to the ENI.
+- Now, if you provision '5' pods on the above discussed node, the L-IPAMD tries to assign one more IPv4 address to the ENI to satisfy the WARM_IP_TARGET of '1'.
 - The MINIMUM_IP_TARGET comes into picture only during the initial stages of a node when it comes up for the first time. Once the MINIMUM_IP_TARGET number of pods are provisioned, L-IPAMD only tries to satisfy WARM_IP_TARGET condition. 
 
 ### Best practices to follow when setting these environment variables for efficient usage of IP addresses in your Subnet:
